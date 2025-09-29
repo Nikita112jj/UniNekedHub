@@ -1,5 +1,3 @@
--- LocalScript
-
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
@@ -36,6 +34,7 @@ local Sections = {
     Main = Window:Section({ Title = "Local Script", Opened = true }),
     Visual = Window:Section({ Title = "Visual", Opened = true }),
     Combat = Window:Section({ Title = "Combat", Opened = true }),
+    Troll = Window:Section({ Title = "Troll", Opened = true }),
     Settings = Window:Section({ Title = "Settings", Opened = true })
 }
 local Tabs = {
@@ -43,10 +42,10 @@ local Tabs = {
     VisualMain = Sections.Visual:Tab({ Title = "Enable Visual", Icon = "eye" }),
     VisualSettings = Sections.Visual:Tab({ Title = "Esp Settings", Icon = "settings" }),
     CombatMain = Sections.Combat:Tab({ Title = "AimBot", Icon = "crosshair" }),
+    TrollMain = Sections.Troll:Tab({ Title = "Trolling", Icon = "zap" }),
     Appearance = Sections.Settings:Tab({ Title = "Themes", Icon = "brush" })
 }
 
--- WalkSpeed
 local currentWalkSpeed, walkLoop = 16, true
 task.spawn(function()
     while true do
@@ -57,7 +56,6 @@ end)
 Tabs.Controls:Toggle({ Title = "Loop WalkSpeed", Value = true, Callback = function(s) walkLoop = s end })
 Tabs.Controls:Slider({ Title = "WalkSpeed", Value = { Min = 1, Max = 200, Default = 16 }, Callback = function(v) currentWalkSpeed = v end })
 
--- JumpPower
 local currentJumpPower, jumpLoop = 50, false
 task.spawn(function()
     while true do
@@ -68,18 +66,15 @@ end)
 Tabs.Controls:Toggle({ Title = "Loop JumpPower", Value = false, Callback = function(s) jumpLoop = s end })
 Tabs.Controls:Slider({ Title = "JumpPower", Value = { Min = 1, Max = 300, Default = 50 }, Callback = function(v) currentJumpPower = v end })
 
--- InfJump
 local infJump = false
 UserInputService.JumpRequest:Connect(function() if infJump then humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end end)
 Tabs.Controls:Toggle({ Title = "InfJump", Value = false, Callback = function(s) infJump = s end })
 
--- NekedFlyGui
 pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/Nikita112jj/NekedFlyGui/refs/heads/main/script"))() end)
 local flyGui = player.PlayerGui:FindFirstChild("main")
 if flyGui then flyGui.Enabled = false end
 Tabs.Controls:Toggle({ Title = "FlyGui", Value = false, Callback = function(s) if flyGui then flyGui.Enabled = s end end })
 
--- Swim
 local swimEnabled = false
 task.spawn(function()
     while true do
@@ -89,7 +84,16 @@ task.spawn(function()
 end)
 Tabs.Controls:Toggle({ Title = "Swim", Value = false, Callback = function(s) swimEnabled = s end })
 
--- ESP
+local noclip = false
+RunService.Stepped:Connect(function()
+    if noclip and character then
+        for _, part in pairs(character:GetDescendants()) do
+            if part:IsA("BasePart") and part.CanCollide then part.CanCollide = false end
+        end
+    end
+end)
+Tabs.Controls:Toggle({ Title = "NoClip", Value = false, Callback = function(s) noclip = s end })
+
 local espEnabled, espName, espDistance, espTextSize = false, false, false, 14
 local espObjects = {}
 local function createESP(char, plr)
@@ -131,33 +135,53 @@ Tabs.VisualMain:Toggle({ Title = "ESP Name", Value = false, Callback = function(
 Tabs.VisualMain:Toggle({ Title = "ESP Distance", Value = false, Callback = function(s) espDistance = s end })
 Tabs.VisualSettings:Slider({ Title = "Text Size", Value = { Min = 1, Max = 10, Default = 5 }, Callback = function(v) espTextSize = v*2 end })
 
--- AimBot
-local aimbotEnabled, fovSize = false, 60
-local fovCircle = Drawing.new("Circle")
-fovCircle.Visible, fovCircle.Thickness, fovCircle.Color, fovCircle.Transparency, fovCircle.Filled, fovCircle.NumSides = false,2,Color3.fromRGB(255,0,0),1,false,64
-fovCircle.Radius = fovSize
-Tabs.CombatMain:Toggle({ Title = "AimBot Enable", Value = false, Callback = function(s) aimbotEnabled,fovCircle.Visible = s,s end })
-Tabs.CombatMain:Slider({ Title = "FOV Size", Value = { Min = 32, Max = 120, Default = 60 }, Callback = function(v) fovSize,fovCircle.Radius = v,v end })
-RunService.RenderStepped:Connect(function()
-    if aimbotEnabled then
-        local center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
-        fovCircle.Position, fovCircle.Radius = center, fovSize
-        local closest,dist=nil,fovSize
-        for _,plr in pairs(Players:GetPlayers()) do
-            if plr~=player and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-                local pos,onScreen=Camera:WorldToViewportPoint(plr.Character.HumanoidRootPart.Position)
-                if onScreen then
-                    local mag=(Vector2.new(pos.X,pos.Y)-center).Magnitude
-                    if mag<dist then dist,closest=mag,plr end
-                end
+local aimbotEnabled, aimRadius, teamCheck = false, 30, false
+Tabs.CombatMain:Toggle({ Title = "AimBot Enable", Value = false, Callback = function(s) aimbotEnabled = s end })
+Tabs.CombatMain:Slider({ Title = "Aim Radius", Value = { Min = 1, Max = 80, Default = 30 }, Callback = function(v) aimRadius = v end })
+Tabs.CombatMain:Toggle({ Title = "Team Check", Value = false, Callback = function(s) teamCheck = s end })
+
+local function getClosestTargetByRadius()
+    local closest, dist = nil, aimRadius
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return nil end
+    local myPos = player.Character.HumanoidRootPart.Position
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr ~= player and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+            if teamCheck and plr.Team == player.Team then continue end
+            local pos = plr.Character.HumanoidRootPart.Position
+            local mag = (pos - myPos).Magnitude
+            if mag < dist then
+                dist, closest = mag, plr
             end
         end
-        if closest and closest.Character and closest.Character:FindFirstChild("HumanoidRootPart") then
-            Camera.CFrame=CFrame.new(Camera.CFrame.Position,closest.Character.HumanoidRootPart.Position)
+    end
+    return closest
+end
+
+RunService.RenderStepped:Connect(function()
+    if aimbotEnabled then
+        local target = getClosestTargetByRadius()
+        if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            local targetPos = target.Character.HumanoidRootPart.Position
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, targetPos)
         end
     end
 end)
 
--- Themes
+local flingEnabled = false
+Tabs.TrollMain:Toggle({ Title = "WalkFling", Value = false, Callback = function(s) flingEnabled = s end })
+RunService.Stepped:Connect(function()
+    if flingEnabled and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+        local hrp = player.Character.HumanoidRootPart
+        for _,plr in pairs(Players:GetPlayers()) do
+            if plr~=player and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                local targetHRP = plr.Character.HumanoidRootPart
+                if (targetHRP.Position-hrp.Position).Magnitude<6 then
+                    targetHRP.AssemblyLinearVelocity = (targetHRP.Position-hrp.Position).Unit*1000000 + Vector3.new(0,1000000,0)
+                end
+            end
+        end
+    end
+end)
+
 local themes={} for themeName,_ in pairs(WindUI:GetThemes()) do table.insert(themes,themeName) end table.sort(themes)
 Tabs.Appearance:Dropdown({ Title = "Select Theme", Values = themes, Value = WindUI:GetCurrentTheme(), Callback = function(theme) WindUI:SetTheme(theme) end })
