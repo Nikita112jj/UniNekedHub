@@ -1,0 +1,163 @@
+-- LocalScript
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Camera = workspace.CurrentCamera
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+
+local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
+WindUI.TransparencyValue = 0.2
+WindUI:SetTheme("Dark")
+
+local Window = WindUI:CreateWindow({
+    Title = "UniNeked Hub",
+    Icon = "geist:window",
+    Author = "by @neked10",
+    Folder = "UniNekedHub",
+    Size = UDim2.fromOffset(650, 500),
+    Theme = "Dark",
+    User = { Enabled = true, Anonymous = false }
+})
+
+Window:Tag({ Title = "Beta", Color = Color3.fromHex("#315dff") })
+local TimeTag = Window:Tag({ Title = "--:--", Color = Color3.fromHex("#315dff") })
+task.spawn(function()
+    while true do
+        local now = os.date("*t")
+        TimeTag:SetTitle(string.format("%02d:%02d", now.hour, now.min))
+        task.wait(1)
+    end
+end)
+
+local Sections = {
+    Main = Window:Section({ Title = "Local Script", Opened = true }),
+    Visual = Window:Section({ Title = "Visual", Opened = true }),
+    Combat = Window:Section({ Title = "Combat", Opened = true }),
+    Settings = Window:Section({ Title = "Settings", Opened = true })
+}
+local Tabs = {
+    Controls = Sections.Main:Tab({ Title = "Functions", Icon = "layout-grid" }),
+    VisualMain = Sections.Visual:Tab({ Title = "Enable Visual", Icon = "eye" }),
+    VisualSettings = Sections.Visual:Tab({ Title = "Esp Settings", Icon = "settings" }),
+    CombatMain = Sections.Combat:Tab({ Title = "AimBot", Icon = "crosshair" }),
+    Appearance = Sections.Settings:Tab({ Title = "Themes", Icon = "brush" })
+}
+
+-- WalkSpeed
+local currentWalkSpeed, walkLoop = 16, true
+task.spawn(function()
+    while true do
+        if humanoid and walkLoop then humanoid.WalkSpeed = currentWalkSpeed end
+        task.wait(0.1)
+    end
+end)
+Tabs.Controls:Toggle({ Title = "Loop WalkSpeed", Value = true, Callback = function(s) walkLoop = s end })
+Tabs.Controls:Slider({ Title = "WalkSpeed", Value = { Min = 1, Max = 200, Default = 16 }, Callback = function(v) currentWalkSpeed = v end })
+
+-- JumpPower
+local currentJumpPower, jumpLoop = 50, false
+task.spawn(function()
+    while true do
+        if humanoid and jumpLoop then humanoid.UseJumpPower = true humanoid.JumpPower = currentJumpPower end
+        task.wait(0.1)
+    end
+end)
+Tabs.Controls:Toggle({ Title = "Loop JumpPower", Value = false, Callback = function(s) jumpLoop = s end })
+Tabs.Controls:Slider({ Title = "JumpPower", Value = { Min = 1, Max = 300, Default = 50 }, Callback = function(v) currentJumpPower = v end })
+
+-- InfJump
+local infJump = false
+UserInputService.JumpRequest:Connect(function() if infJump then humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end end)
+Tabs.Controls:Toggle({ Title = "InfJump", Value = false, Callback = function(s) infJump = s end })
+
+-- NekedFlyGui
+pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/Nikita112jj/NekedFlyGui/refs/heads/main/script"))() end)
+local flyGui = player.PlayerGui:FindFirstChild("main")
+if flyGui then flyGui.Enabled = false end
+Tabs.Controls:Toggle({ Title = "FlyGui", Value = false, Callback = function(s) if flyGui then flyGui.Enabled = s end end })
+
+-- Swim
+local swimEnabled = false
+task.spawn(function()
+    while true do
+        if humanoid and swimEnabled then humanoid:ChangeState(Enum.HumanoidStateType.Swimming) end
+        task.wait(0.1)
+    end
+end)
+Tabs.Controls:Toggle({ Title = "Swim", Value = false, Callback = function(s) swimEnabled = s end })
+
+-- ESP
+local espEnabled, espName, espDistance, espTextSize = false, false, false, 14
+local espObjects = {}
+local function createESP(char, plr)
+    if espObjects[char] then return end
+    local highlight = Instance.new("Highlight", char)
+    highlight.FillTransparency, highlight.OutlineTransparency = 1, 0
+    highlight.OutlineColor = plr.Team and plr.Team.TeamColor.Color or Color3.fromRGB(255,255,255)
+    local billboard = Instance.new("BillboardGui")
+    billboard.Size, billboard.AlwaysOnTop, billboard.Adornee = UDim2.new(0,200,0,50), true, char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
+    billboard.Parent = game.CoreGui
+    local textLabel = Instance.new("TextLabel", billboard)
+    textLabel.Size, textLabel.BackgroundTransparency = UDim2.new(1,0,1,0), 1
+    textLabel.TextColor3, textLabel.TextStrokeTransparency = Color3.fromRGB(255,255,255), 0
+    textLabel.Font, textLabel.TextScaled, textLabel.TextSize = Enum.Font.SourceSansBold, false, espTextSize
+    espObjects[char] = { Highlight = highlight, Billboard = billboard, Text = textLabel, Player = plr }
+end
+local function removeESP(c) if espObjects[c] then for _,o in pairs(espObjects[c]) do if typeof(o)=="Instance" then o:Destroy() end end espObjects[c]=nil end end
+RunService.RenderStepped:Connect(function()
+    for _,plr in pairs(Players:GetPlayers()) do
+        if plr~=player and plr.Character then
+            if espEnabled then
+                if not espObjects[plr.Character] then createESP(plr.Character, plr) end
+                local e = espObjects[plr.Character] if e then
+                    e.Highlight.OutlineColor = plr.Team and plr.Team.TeamColor.Color or Color3.fromRGB(255,255,255)
+                    local dist = (plr.Character:FindFirstChild("HumanoidRootPart") and player.Character and player.Character:FindFirstChild("HumanoidRootPart"))
+                        and math.floor((plr.Character.HumanoidRootPart.Position - player.Character.HumanoidRootPart.Position).Magnitude) or 0
+                    local parts={} if espName then table.insert(parts,plr.Name) end if espDistance then table.insert(parts,"["..dist.."]") end
+                    e.Text.Text, e.Text.TextSize = table.concat(parts," "), espTextSize
+                    e.Billboard.Adornee = plr.Character:FindFirstChild("Head") or plr.Character:FindFirstChild("HumanoidRootPart")
+                end
+            else removeESP(plr.Character) end
+        end
+    end
+end)
+Players.PlayerAdded:Connect(function(plr) plr.CharacterAdded:Connect(function(c) if espEnabled then createESP(c,plr) end end) end)
+Players.PlayerRemoving:Connect(function(plr) if plr.Character then removeESP(plr.Character) end end)
+Tabs.VisualMain:Toggle({ Title = "ESP Player", Value = false, Callback = function(s) espEnabled = s end })
+Tabs.VisualMain:Toggle({ Title = "ESP Name", Value = false, Callback = function(s) espName = s end })
+Tabs.VisualMain:Toggle({ Title = "ESP Distance", Value = false, Callback = function(s) espDistance = s end })
+Tabs.VisualSettings:Slider({ Title = "Text Size", Value = { Min = 1, Max = 10, Default = 5 }, Callback = function(v) espTextSize = v*2 end })
+
+-- AimBot
+local aimbotEnabled, fovSize = false, 60
+local fovCircle = Drawing.new("Circle")
+fovCircle.Visible, fovCircle.Thickness, fovCircle.Color, fovCircle.Transparency, fovCircle.Filled, fovCircle.NumSides = false,2,Color3.fromRGB(255,0,0),1,false,64
+fovCircle.Radius = fovSize
+Tabs.CombatMain:Toggle({ Title = "AimBot Enable", Value = false, Callback = function(s) aimbotEnabled,fovCircle.Visible = s,s end })
+Tabs.CombatMain:Slider({ Title = "FOV Size", Value = { Min = 32, Max = 120, Default = 60 }, Callback = function(v) fovSize,fovCircle.Radius = v,v end })
+RunService.RenderStepped:Connect(function()
+    if aimbotEnabled then
+        local center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+        fovCircle.Position, fovCircle.Radius = center, fovSize
+        local closest,dist=nil,fovSize
+        for _,plr in pairs(Players:GetPlayers()) do
+            if plr~=player and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                local pos,onScreen=Camera:WorldToViewportPoint(plr.Character.HumanoidRootPart.Position)
+                if onScreen then
+                    local mag=(Vector2.new(pos.X,pos.Y)-center).Magnitude
+                    if mag<dist then dist,closest=mag,plr end
+                end
+            end
+        end
+        if closest and closest.Character and closest.Character:FindFirstChild("HumanoidRootPart") then
+            Camera.CFrame=CFrame.new(Camera.CFrame.Position,closest.Character.HumanoidRootPart.Position)
+        end
+    end
+end)
+
+-- Themes
+local themes={} for themeName,_ in pairs(WindUI:GetThemes()) do table.insert(themes,themeName) end table.sort(themes)
+Tabs.Appearance:Dropdown({ Title = "Select Theme", Values = themes, Value = WindUI:GetCurrentTheme(), Callback = function(theme) WindUI:SetTheme(theme) end })
